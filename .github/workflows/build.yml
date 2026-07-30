@@ -1,4 +1,4 @@
-name: Build NotchTune (macOS Ventura)
+name: Build NotchTune (100% Swift / SPM)
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     name: Build & Package NotchTune
-    runs-on: macos-14 # Runner macOS Sonoma cài sẵn Xcode 15
+    runs-on: macos-14 # macOS 14 runner đã cài sẵn Swift 5.10 / Xcode 15
 
     steps:
       - name: Checkout repository
@@ -19,39 +19,49 @@ jobs:
       - name: Select Xcode Version
         run: |
           sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
-          xcodebuild -version
+          swift --version
 
-      - name: Cache SPM Packages
-        uses: actions/cache@v4
-        with:
-          path: SourcePackages
-          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved', '**/*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: |
-            ${{ runner.os }}-spm-
-
-      - name: Build NotchTune App
+      - name: Build with Swift Package Manager
         run: |
-          mkdir -p build
-          xcodebuild clean archive \
-            -project NotchTune.xcodeproj \
-            -scheme NotchTune \
-            -configuration Release \
-            -archivePath ./build/NotchTune.xcarchive \
-            -clonedSourcePackagesDirPath SourcePackages \
-            MACOSX_DEPLOYMENT_TARGET=13.0 \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+          # Build executable bằng Swift Compiler, ép target về macOS Ventura (13.0)
+          swift build -c release --triple x86_64-apple-macosx13.0
 
-      - name: Export Application Bundle
+      - name: Package .app Bundle
         run: |
-          mkdir -p build/export
-          cp -R ./build/NotchTune.xcarchive/Products/Applications/NotchTune.app ./build/export/
+          mkdir -p build/NotchTune.app/Contents/MacOS
+          mkdir -p build/NotchTune.app/Contents/Resources
           
+          # Copy binary đã compile từ SPM vào .app structure
+          cp .build/x86_64-apple-macosx/release/NotchTune build/NotchTune.app/Contents/MacOS/
+          
+          # Tạo Info.plist để macOS nhận diện đây là một App Bundle chạy ngầm (LSUIElement = true)
+          cat <<EOF > build/NotchTune.app/Contents/Info.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>NotchTune</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.notchtune.app</string>
+              <key>CFBundleName</key>
+              <string>NotchTune</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>13.0</string>
+              <key>LSUIElement</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
       - name: Create ZIP Archive
         run: |
-          cd build/export
-          zip -r ../NotchTune-macOS-Ventura.zip NotchTune.app
+          cd build
+          zip -r NotchTune-macOS-Ventura.zip NotchTune.app
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
