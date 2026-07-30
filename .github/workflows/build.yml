@@ -1,0 +1,61 @@
+name: Build NotchTune (macOS Ventura)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Package NotchTune
+    runs-on: macos-14 # Runner macOS Sonoma cài sẵn Xcode 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode Version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Cache SPM Packages
+        uses: actions/cache@v4
+        with:
+          path: SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved', '**/*.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Build NotchTune App
+        run: |
+          mkdir -p build
+          xcodebuild clean archive \
+            -project NotchTune.xcodeproj \
+            -scheme NotchTune \
+            -configuration Release \
+            -archivePath ./build/NotchTune.xcarchive \
+            -clonedSourcePackagesDirPath SourcePackages \
+            MACOSX_DEPLOYMENT_TARGET=13.0 \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Export Application Bundle
+        run: |
+          mkdir -p build/export
+          cp -R ./build/NotchTune.xcarchive/Products/Applications/NotchTune.app ./build/export/
+          
+      - name: Create ZIP Archive
+        run: |
+          cd build/export
+          zip -r ../NotchTune-macOS-Ventura.zip NotchTune.app
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NotchTune-macOS13-Ventura
+          path: build/NotchTune-macOS-Ventura.zip
+          retention-days: 14
