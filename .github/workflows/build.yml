@@ -1,4 +1,4 @@
-name: Build NotchTune (100% Swift / SPM)
+name: Build NotchBox (macOS Ventura - Intel x86_64)
 
 on:
   push:
@@ -9,8 +9,8 @@ on:
 
 jobs:
   build:
-    name: Build & Package NotchTune
-    runs-on: macos-14 # macOS 14 runner đã cài sẵn Swift 5.10 / Xcode 15
+    name: Build & Package NotchBox (Intel)
+    runs-on: macos-13 # Runner kiến trúc Intel chạy macOS Ventura
 
     steps:
       - name: Checkout repository
@@ -18,34 +18,49 @@ jobs:
 
       - name: Select Xcode Version
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer
           swift --version
 
-      - name: Build with Swift Package Manager
+      - name: Build Swift Package for Intel x86_64
         run: |
-          # Build executable bằng Swift Compiler, ép target về macOS Ventura (13.0)
-          swift build -c release --triple x86_64-apple-macosx13.0
+          # Ép target biên dịch cho kiến trúc Intel x86_64 trên macOS Ventura 13.0
+          swift build -c release -Xswiftc -target -Xswiftc x86_64-apple-macosx13.0
 
-      - name: Package .app Bundle
+      - name: Locate Executable & Package .app
         run: |
-          mkdir -p build/NotchTune.app/Contents/MacOS
-          mkdir -p build/NotchTune.app/Contents/Resources
+          # Tìm file binary 'NotchBox' tự động trong thư mục .build
+          BIN_PATH=$(find .build -type f -name "NotchBox" | grep -i "release" | head -n 1)
           
-          # Copy binary đã compile từ SPM vào .app structure
-          cp .build/x86_64-apple-macosx/release/NotchTune build/NotchTune.app/Contents/MacOS/
+          if [ -z "$BIN_PATH" ]; then
+            echo "Error: Binary NotchBox not found!"
+            find .build -type f
+            exit 1
+          fi
           
-          # Tạo Info.plist để macOS nhận diện đây là một App Bundle chạy ngầm (LSUIElement = true)
-          cat <<EOF > build/NotchTune.app/Contents/Info.plist
+          echo "Found binary at: $BIN_PATH"
+
+          # Tạo cấu trúc .app bundle
+          mkdir -p build/NotchBox.app/Contents/MacOS
+          mkdir -p build/NotchBox.app/Contents/Resources
+
+          # Copy binary vào .app
+          cp "$BIN_PATH" build/NotchBox.app/Contents/MacOS/NotchBox
+
+          # Copy Info.plist từ thư mục Resources/ nếu có, hoặc tự tạo nếu thiếu
+          if [ -f "Resources/Info.plist" ]; then
+            cp Resources/Info.plist build/NotchBox.app/Contents/Info.plist
+          else
+            cat <<EOF > build/NotchBox.app/Contents/Info.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
               <key>CFBundleExecutable</key>
-              <string>NotchTune</string>
+              <string>NotchBox</string>
               <key>CFBundleIdentifier</key>
-              <string>com.notchtune.app</string>
+              <string>com.tinfine.NotchBox</string>
               <key>CFBundleName</key>
-              <string>NotchTune</string>
+              <string>NotchBox</string>
               <key>CFBundlePackageType</key>
               <string>APPL</string>
               <key>CFBundleShortVersionString</key>
@@ -57,15 +72,16 @@ jobs:
           </dict>
           </plist>
           EOF
+          fi
 
       - name: Create ZIP Archive
         run: |
           cd build
-          zip -r NotchTune-macOS-Ventura.zip NotchTune.app
+          zip -r NotchBox-macOS-Ventura-Intel.zip NotchBox.app
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NotchTune-macOS13-Ventura
-          path: build/NotchTune-macOS-Ventura.zip
+          name: NotchBox-macOS13-Intel
+          path: build/NotchBox-macOS-Ventura-Intel.zip
           retention-days: 14
